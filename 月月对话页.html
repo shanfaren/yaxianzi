@@ -114,6 +114,7 @@ const status = document.getElementById('status');
 const moon = document.getElementById('moon');
 let recognizing = false;
 let apiKey = localStorage.getItem('ds_key') || '';
+let history = [];  // 多轮对话记忆
 
 function addMsg(text, who){
   const div = document.createElement('div');
@@ -121,6 +122,9 @@ function addMsg(text, who){
   div.textContent = text;
   chat.appendChild(div);
   chat.scrollTop = chat.scrollHeight;
+  /* 存对话历史（最近10轮=20条） */
+  history.push({role: who==='user'?'user':'assistant', content: text});
+  if(history.length > 20) history = history.slice(-20);
   return div;
 }
 /* 嵌入 Qt 小窗模式 */
@@ -182,29 +186,32 @@ function localReply(q){
 
 /* ---------- DeepSeek 真实问答 ---------- */
 async function askDeepSeek(q){
-  // 通过 server.py(http) 访问时走本地代理；双击 file:// 打开时直连 DeepSeek
   if(location.protocol.startsWith('http')){
-    const r = await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:q})});
+    const r = await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:q, history:history})});
     const d = await r.json();
     if(d.error) throw new Error(d.error);
-    return d;  // {reply, audio}
+    return d;
   }
+  const msgs = [{role:'system',content:SYSTEM}, ...history.slice(-20), {role:'user',content:q}];
   const r = await fetch('https://ark.cn-beijing.volces.com/api/plan/v3/chat/completions',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey},
-    body:JSON.stringify({model:'doubao-seed-evolving',messages:[{role:'system',content:SYSTEM},{role:'user',content:q}],temperature:0.7,max_tokens:120})
+    body:JSON.stringify({model:'doubao-seed-evolving',messages:msgs,temperature:0.7,max_tokens:100})
   });
   if(!r.ok) throw new Error('HTTP '+r.status);
   const d = await r.json();
   return {reply: d.choices[0].message.content.trim(), audio:null};
 }
 
-/* 播放云端甜声音频 */
+/* 播放云端甜声音频 + 打字机效果 */
 let curAudio = null;
+let typeTimer = null;
 function playAnswer(ans){
-  addMsg(ans, 'ai');
+  /* 先创建空的AI消息气泡 */
+  const div = addMsg('', 'ai');
   if(curAudio){ try{curAudio.pause();}catch(e){} curAudio=null; }
   moon.classList.add('talking');
+  /* 同时开始TTS播放 */
   const url = '/api/tts?text=' + encodeURIComponent(ans);
   curAudio = new Audio(url);
   curAudio.onended = ()=> { moon.classList.remove('talking'); curAudio=null; };
@@ -213,6 +220,15 @@ function playAnswer(ans){
     moon.classList.remove('talking');
     speak(ans);
   });
+  /* 打字机效果：逐字显示 */
+  if(typeTimer){ clearInterval(typeTimer); typeTimer=null; }
+  let i = 0;
+  typeTimer = setInterval(()=>{
+    i++;
+    div.textContent = ans.slice(0, i);
+    chat.scrollTop = chat.scrollHeight;
+    if(i >= ans.length){ clearInterval(typeTimer); typeTimer=null; }
+  }, 40);
 }
 
 async function handleAsk(q){
@@ -232,30 +248,49 @@ async function handleAsk(q){
   playAnswer(ans);
 }
 
-/* ---------- 麦克风 ---------- */
+/* ---------- 麦克风：按住说话 ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const btnMic = document.getElementById('btnMic');
 const inputrow = document.getElementById('inputrow');
 const isFile = location.protocol === 'file:';
 if(isFile){ status.textContent = '小提示：双击打开时语音识别不可用，请用下方输入框打字'; }
 if(!SR){
-  status.textContent = '此浏览器不支持语音识别，请用下方输入框打字';
   btnMic.disabled = true; btnMic.style.opacity = .5;
 } else {
-  const rec = new SR(); rec.lang='zh-CN'; rec.interimResults=false;
-  btnMic.onclick = ()=>{
-    if(recognizing){ rec.stop(); return; }
+  const rec = new SR(); rec.lang='zh-CN'; rec.interimResults=true;
+  let finalText = '';
+  function startRec(){
+    finalText = '';
     try{ rec.start(); }catch(e){}
-    recognizing=true; btnMic.textContent='🔴'; status.textContent='请说…';
+    recognizing=true; btnMic.textContent='🔴'; status.textContent='正在听…';
+  }
+  function stopRec(){
+    if(recognizing){
+      try{ rec.stop(); }catch(e){}
+    }
+  }
+  /* 按住开始，松开结束 */
+  btnMic.addEventListener('mousedown', startRec);
+  btnMic.addEventListener('touchstart', e=>{ e.preventDefault(); startRec(); });
+  btnMic.addEventListener('mouseup', stopRec);
+  btnMic.addEventListener('mouseleave', stopRec);
+  btnMic.addEventListener('touchend', e=>{ e.preventDefault(); stopRec(); });
+  rec.onresult = e=>{
+    let interim = '';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      if(e.results[i].isFinal) finalText = e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    if(interim) status.textContent = '你说：' + interim;
   };
-  rec.onresult = e=>{ const q=e.results[0][0].transcript; handleAsk(q); };
-  rec.onend = ()=>{ recognizing=false; btnMic.textContent='🎤'; };
+  rec.onend = ()=>{
+    recognizing=false; btnMic.textContent='🎤';
+    if(finalText.trim()){ handleAsk(finalText.trim()); }
+  };
   rec.onerror = e=>{
     recognizing=false; btnMic.textContent='🎤';
-    if(isFile || e.error==='not-allowed' || e.error==='service-not-allowed'){
-      status.textContent='语音识别需 http://localhost 或 https 环境：请用下方输入框打字，或用 server.py 启动';
-    } else {
-      status.textContent='没听清，请再点一次麦克风，或打字问我（错误：'+e.error+'）';
+    if(e.error==='not-allowed' || e.error==='service-not-allowed'){
+      status.textContent='语音识别不可用，请用输入框打字';
     }
   };
 }

@@ -58,11 +58,20 @@ def chat():
     key = os.environ.get("ARK_KEY", "")
     if not key:
         return jsonify({"error": "未配置 ARK_KEY"}), 500
-    q = (request.get_json() or {}).get("message", "")
+    body = request.get_json() or {}
+    q = body.get("message", "")
+    history = body.get("history", [])
+    # 组装 messages：system + 最近10轮历史 + 当前问题
+    msgs = [{"role": "system", "content": SYSTEM}]
+    for h in history[-20:]:
+        role = h.get("role", "user")
+        content = h.get("content", "")
+        if role in ("user", "assistant") and content:
+            msgs.append({"role": role, "content": content})
+    msgs.append({"role": "user", "content": q})
     payload = json.dumps({
         "model": ARK_MODEL,
-        "messages": [{"role": "system", "content": SYSTEM},
-                     {"role": "user", "content": q}],
+        "messages": msgs,
         "temperature": 0.7, "max_tokens": 100
     }).encode()
     req = urllib.request.Request(ARK_URL, data=payload, method="POST",
