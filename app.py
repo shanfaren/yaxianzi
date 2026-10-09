@@ -6,7 +6,7 @@
   TTS_KEY   豆包语音 Key
 """
 import os, json, base64, urllib.request
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response
 
 app = Flask(__name__, static_folder=".", static_url_path="")
 
@@ -21,7 +21,8 @@ SYSTEM = """你是面向12岁以下儿童的护牙虚拟学伴"牙仙子月月"�
 遇到牙疼/牙洞/出血/肿胀/外伤，只说："请告诉老师和家长，让牙医检查才准确。"
 问到牙齿以外的事，引导回牙齿话题。不确定就说"我不确定，请老师帮助确认"，绝不编造。"""
 
-def tts(text):
+def tts_raw(text):
+    """返回mp3字节，失败返回None"""
     key = os.environ.get("TTS_KEY", "")
     if not key:
         return None
@@ -43,7 +44,7 @@ def tts(text):
                 except: continue
                 if o.get("data"): chunks.append(base64.b64decode(o["data"]))
         if not chunks: return None
-        return base64.b64encode(b"".join(chunks)).decode()
+        return b"".join(chunks)
     except Exception as e:
         print("TTS fail:", e)
         return None
@@ -70,9 +71,18 @@ def chat():
         with urllib.request.urlopen(req, timeout=30) as r:
             data = json.loads(r.read().decode())
             ans = data["choices"][0]["message"]["content"].strip()
-        return jsonify({"reply": ans, "audio": tts(ans)})
+        return jsonify({"reply": ans})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/tts")
+def tts_api():
+    text = request.args.get("text", "")
+    if not text: return ("", 400)
+    audio = tts_raw(text)
+    if not audio: return ("", 500)
+    return Response(audio, mimetype="audio/mpeg",
+                    headers={"Cache-Control": "no-cache"})
 
 @app.route("/greeting.mp3")
 def greeting():

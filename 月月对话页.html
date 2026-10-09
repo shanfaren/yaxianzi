@@ -43,8 +43,8 @@
     word-break:break-word; overflow-wrap:anywhere; white-space:normal;
   }
   .status{ font-size:12px; opacity:.7; min-height:18px; margin-bottom:8px; text-align:center; }
-  /* 输入行（小朋友不打字，默认隐藏；老师可在设置里开） */
-  .inputrow{ width:100%; display:none; gap:8px; margin-bottom:12px; }
+  /* 输入行：手机端始终显示，方便打字 */
+  .inputrow{ width:100%; display:flex; gap:8px; margin-bottom:12px; }
   .inputrow.show{ display:flex; }
   .inputrow input{ flex:1; border:2px solid #f9a8d4; border-radius:14px; padding:10px 12px; font-size:15px; }
   .inputrow button{ padding:10px 16px; font-size:15px; }
@@ -218,32 +218,34 @@ async function askDeepSeek(q){
 }
 
 /* 播放云端甜声音频；没有就退回系统语音 */
+let curAudio = null;
 function playAnswer(ans, audioB64){
   bubble.textContent = ans;
-  if(audioB64){
-    moon.classList.add('talking');
-    const a = new Audio('data:audio/mp3;base64,'+audioB64);
-    a.onended = ()=> moon.classList.remove('talking');
-    a.onerror = ()=> { moon.classList.remove('talking'); speak(ans); };
-    a.play();
-  } else {
+  if(curAudio){ try{curAudio.pause();}catch(e){} curAudio=null; }
+  moon.classList.add('talking');
+  const url = '/api/tts?text=' + encodeURIComponent(ans);
+  curAudio = new Audio(url);
+  curAudio.onended = ()=> { moon.classList.remove('talking'); curAudio=null; };
+  curAudio.onerror = ()=> { moon.classList.remove('talking'); speak(ans); };
+  curAudio.play().catch(()=>{
+    moon.classList.remove('talking');
     speak(ans);
-  }
+  });
 }
 
 async function handleAsk(q){
   if(!q || !q.trim()) return;
   status.textContent = '月月想一下…';
-  let ans, audio=null;
+  let ans;
   const useAI = apiKey || location.protocol.startsWith('http');
   if(useAI){
-    try{ const r = await askDeepSeek(q); ans=r.reply; audio=r.audio; }
+    try{ const r = await askDeepSeek(q); ans=r.reply; }
     catch(e){ ans = localReply(q); status.textContent='网络问题，先用本地答案：'+e; }
   } else {
     ans = localReply(q);
-    status.textContent = '演示模式：用 server.py 启动后可真实问答';
+    status.textContent = '演示模式';
   }
-  playAnswer(ans, audio);
+  playAnswer(ans);
 }
 
 /* ---------- 麦克风 ---------- */
