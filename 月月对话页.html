@@ -116,6 +116,21 @@ let recognizing = false;
 let apiKey = localStorage.getItem('ds_key') || '';
 let history = [];  // 多轮对话记忆
 
+/* 全局Audio对象：第一次用户触摸页面时解锁，之后TTS复用它 */
+let bgAudio = new Audio();
+bgAudio.preload = 'auto';
+let audioUnlocked = false;
+function unlockAudio(){
+  if(audioUnlocked) return;
+  audioUnlocked = true;
+  /* 播放一段极短静音解锁微信自动播放限制 */
+  bgAudio.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU2LjM2LjEwMAAAAAAA';
+  bgAudio.play().then(()=>{ bgAudio.pause(); bgAudio.currentTime = 0; }).catch(()=>{});
+}
+/* 任何触摸/点击都解锁 */
+document.addEventListener('touchstart', unlockAudio, {once:false, passive:true});
+document.addEventListener('click', unlockAudio, {once:false});
+
 function addMsg(text, who){
   const div = document.createElement('div');
   div.className = 'msg ' + who;
@@ -204,19 +219,16 @@ async function askDeepSeek(q){
 }
 
 /* 播放云端甜声音频 + 打字机效果 */
-let curAudio = null;
 let typeTimer = null;
 function playAnswer(ans){
   /* 先创建空的AI消息气泡 */
   const div = addMsg('', 'ai');
-  if(curAudio){ try{curAudio.pause();}catch(e){} curAudio=null; }
   moon.classList.add('talking');
-  /* 同时开始TTS播放 */
-  const url = '/api/tts?text=' + encodeURIComponent(ans);
-  curAudio = new Audio(url);
-  curAudio.onended = ()=> { moon.classList.remove('talking'); curAudio=null; };
-  curAudio.onerror = ()=> { moon.classList.remove('talking'); speak(ans); };
-  curAudio.play().catch(()=>{
+  /* 用全局已解锁的Audio对象播放 */
+  bgAudio.src = '/api/tts?text=' + encodeURIComponent(ans);
+  bgAudio.onended = ()=> { moon.classList.remove('talking'); };
+  bgAudio.onerror = ()=> { moon.classList.remove('talking'); speak(ans); };
+  bgAudio.play().catch(()=>{
     moon.classList.remove('talking');
     speak(ans);
   });
@@ -234,8 +246,6 @@ function playAnswer(ans){
 async function handleAsk(q){
   if(!q || !q.trim()) return;
   addMsg(q, 'user');
-  /* 用户手势里解锁音频 */
-  try{ const u=new Audio(); u.play(); u.pause(); }catch(e){}
   status.textContent = '月月想一下…';
   let ans;
   const useAI = apiKey || location.protocol.startsWith('http');
