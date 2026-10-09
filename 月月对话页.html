@@ -240,7 +240,7 @@ function playAnswer(ans){
     div.textContent = ans.slice(0, i);
     chat.scrollTop = chat.scrollHeight;
     if(i >= ans.length){ clearInterval(typeTimer); typeTimer=null; }
-  }, 40);
+  }, 25);
 }
 
 async function handleAsk(q){

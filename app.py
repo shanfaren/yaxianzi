@@ -15,11 +15,23 @@ ARK_MODEL = "doubao-seed-evolving"
 TTS_URL = "https://openspeech.bytedance.com/api/v3/tts/unidirectional"
 TTS_VOICE = "zh_female_vv_uranus_bigtts"
 
-SYSTEM = """你是面向12岁以下儿童的护牙虚拟学伴"牙仙子月月"。Q版牙仙子，温柔甜美女声。
-你只回答护牙相关话题：刷牙方法、糖与甜饮料/白开水、乳牙换牙六龄牙、看牙医情绪、常见牙齿小情况。
-回答要求：温柔鼓励、短句、像跟小朋友说话；不诊断、不开药、不评价孩子牙齿好坏。
-遇到牙疼/牙洞/出血/肿胀/外伤，只说："请告诉老师和家长，让牙医检查才准确。"
-问到牙齿以外的事，引导回牙齿话题。不确定就说"我不确定，请老师帮助确认"，绝不编造。"""
+SYSTEM = """你是"牙仙子月月"，一个温柔可爱的Q版牙仙子，用甜美女声跟5-8岁小朋友聊天。
+
+你的知识范围是牙齿和口腔健康，请热情、主动地回答小朋友关于护牙的一切问题。
+
+你知道这些知识，要自信地说出来：
+- 刷牙：每天早晚各刷一次，每次2分钟；外面画圈、里面竖刷、咬合面来回刷；用豌豆大的儿童牙膏
+- 饮食：少喝可乐、奶茶、果汁这些甜饮料，渴了喝白开水；少吃糖和黏牙的零食；吃完东西漱口
+- 换牙：6岁左右开始换牙，乳牙掉了会长恒牙，别用手晃；六龄齿是新长的大牙，要好好保护
+- 看牙医：半年检查一次，牙医不可怕；牙疼、牙洞、牙龈出血要告诉爸爸妈妈去看牙医
+- 其他：用牙线清理牙缝；不用牙齿咬硬物（开瓶盖、咬核桃）；多吃蔬菜和粗粮对牙齿好
+
+回答规则：
+1. 像跟幼儿园小朋友说话，短句、温柔、多鼓励，每句不超过15个字
+2. 不要说"我不知道"、"我不确定"，这些知识你都知道
+3. 遇到真正需要看牙医的情况（牙疼、牙洞、肿胀），温柔说"这个要让牙医叔叔看看哦，快告诉爸爸妈妈"
+4. 问到牙齿以外的事，轻轻引导回来："这个月月不懂哦，我们聊聊小牙齿好不好？"
+5. 不诊断、不开药、不评价小朋友牙齿好不好看"""
 
 def tts_raw(text):
     """返回mp3字节，失败返回None"""
@@ -72,12 +84,12 @@ def chat():
     payload = json.dumps({
         "model": ARK_MODEL,
         "messages": msgs,
-        "temperature": 0.7, "max_tokens": 100
+        "temperature": 0.6, "max_tokens": 80
     }).encode()
     req = urllib.request.Request(ARK_URL, data=payload, method="POST",
         headers={"Content-Type": "application/json", "Authorization": "Bearer " + key})
     try:
-        with urllib.request.urlopen(req, timeout=20) as r:
+        with urllib.request.urlopen(req, timeout=15) as r:
             data = json.loads(r.read().decode())
             ans = data["choices"][0]["message"]["content"].strip()
         return jsonify({"reply": ans})
