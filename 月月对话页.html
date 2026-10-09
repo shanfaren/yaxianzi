@@ -235,12 +235,12 @@ function playAnswer(ans, audioB64){
 
 async function handleAsk(q){
   if(!q || !q.trim()) return;
-  status.textContent = '月月想一下…';
+  status.textContent = '你说了：「' + q + '」，月月想一下…';
   let ans;
   const useAI = apiKey || location.protocol.startsWith('http');
   if(useAI){
     try{ const r = await askDeepSeek(q); ans=r.reply; }
-    catch(e){ ans = localReply(q); status.textContent='网络问题，先用本地答案：'+e; }
+    catch(e){ ans = localReply(q); status.textContent='网络问题，先用本地答案'; }
   } else {
     ans = localReply(q);
     status.textContent = '演示模式';
@@ -293,16 +293,29 @@ if(new URLSearchParams(location.search).get('mode')==='stage'){
 const file = document.getElementById('file');
 const preview = document.getElementById('preview');
 document.getElementById('btnPhoto').onclick = ()=> file.click();
-file.onchange = e=>{
+file.onchange = async e=>{
   const f=e.target.files[0]; if(!f) return;
   const rd=new FileReader();
-  rd.onload = ev=>{
+  rd.onload = async ev=>{
     document.getElementById('previewImg').src=ev.target.result;
-    const msg='月月认真看了看：记得把里面和后牙都刷到哦。不确定的地方，让爸爸妈妈带你请牙医检查最准确。';
-    document.getElementById('previewText').textContent=msg;
-    preview.style.display='flex'; speak(msg);
+    document.getElementById('previewText').textContent='月月正在认真看你的照片…';
+    preview.style.display='flex';
+    const b64 = ev.target.result.split(',')[1];
+    try{
+      const r = await fetch('/api/photo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:b64})});
+      const d = await r.json();
+      const msg = d.reply || '月月看不太清楚呢';
+      document.getElementById('previewText').textContent=msg;
+      bubble.textContent = msg;
+      playAnswer(msg);
+    }catch(err){
+      const msg='月月看不太清楚呢，让爸爸妈妈带你请牙医检查最准确哦';
+      document.getElementById('previewText').textContent=msg;
+      speak(msg);
+    }
   };
   rd.readAsDataURL(f);
+  e.target.value='';
 };
 document.getElementById('btnClose').onclick = ()=> preview.style.display='none';
 
