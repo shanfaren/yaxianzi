@@ -29,7 +29,7 @@ def tts_raw(text):
     payload = json.dumps({
         "user": {"uid": "yueyue"},
         "req_params": {"text": text, "speaker": TTS_VOICE,
-                       "audio_params": {"format": "mp3", "sample_rate": 24000, "speech_rate": -10}}
+                       "audio_params": {"format": "mp3", "sample_rate": 16000, "speech_rate": -10}}
     }).encode()
     req = urllib.request.Request(TTS_URL, data=payload, method="POST",
         headers={"Content-Type": "application/json", "X-Api-Key": key,

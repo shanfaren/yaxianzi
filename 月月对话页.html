@@ -13,41 +13,37 @@
     display:flex; align-items:center; justify-content:center; padding:12px; position:relative;
   }
   .phone{
-    width:min(96vw,520px); height:min(96vh,880px);
+    width:min(96vw,480px); height:min(96vh,860px);
     background: linear-gradient(180deg,#173a66 0%,#0d2547 100%);
-    border-radius:32px; box-shadow:0 24px 70px rgba(0,0,0,.6), inset 0 0 0 2px rgba(255,255,255,.12);
-    display:flex; flex-direction:column; align-items:center; padding:18px 20px 20px;
+    border-radius:28px; box-shadow:0 24px 70px rgba(0,0,0,.6), inset 0 0 0 2px rgba(255,255,255,.12);
+    display:flex; flex-direction:column; align-items:center; padding:14px 16px 16px;
     overflow-y:auto; position:relative;
   }
   body.embed{ background:transparent; padding:0; }
   body.embed .phone{ width:100%; height:100%; border-radius:22px; box-shadow:none; }
-  /* 顶栏：只留标题，去掉按钮 */
-  .topbar{ width:100%; padding:4px 2px 12px; display:flex; justify-content:center; align-items:center; }
-  .topbar .brand{ font-size:22px; font-weight:700; letter-spacing:1px; }
-  /* 角色头像 */
-  .moon{ width:min(48%,220px); margin:6px 0 14px; z-index:2; flex-shrink:0; }
-  .moon img{ width:100%; aspect-ratio:1/1; object-fit:cover; border-radius:24px; display:block;
+  .topbar{ width:100%; padding:2px 0 8px; display:flex; justify-content:center; align-items:center; flex-shrink:0; }
+  .topbar .brand{ font-size:18px; font-weight:700; letter-spacing:1px; }
+  .moon{ width:min(40%,160px); margin:4px 0 10px; z-index:2; flex-shrink:0; }
+  .moon img{ width:100%; aspect-ratio:1/1; object-fit:cover; border-radius:20px; display:block;
              border:3px solid rgba(255,211,107,.8); box-shadow:0 8px 26px rgba(0,0,0,.4); transition:transform .3s; }
   .moon.talking img{ transform:scale(1.05); }
-  /* 聊天区域 */
-  .chat{ width:100%; flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:12px; padding:6px 0; }
-  .msg{ max-width:82%; padding:14px 18px; border-radius:20px; font-size:19px; line-height:1.6; word-break:break-word; }
-  .msg.ai{ align-self:flex-start; background:rgba(255,255,255,.97); color:#0b1f3a; border-bottom-left-radius:6px; }
-  .msg.user{ align-self:flex-end; background:linear-gradient(135deg,#2ea8e6,#6bb8ff); color:#fff; border-bottom-right-radius:6px; }
-  .status{ font-size:14px; opacity:.6; min-height:20px; margin:4px 0; text-align:center; }
-  /* 豆包风格输入栏 */
+  .chat{ width:100%; flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:10px; padding:4px 0; min-height:100px; }
+  .msg{ max-width:85%; padding:10px 14px; border-radius:16px; font-size:16px; line-height:1.5; word-break:break-word; }
+  .msg.ai{ align-self:flex-start; background:rgba(255,255,255,.97); color:#0b1f3a; border-bottom-left-radius:4px; }
+  .msg.user{ align-self:flex-end; background:linear-gradient(135deg,#2ea8e6,#6bb8ff); color:#fff; border-bottom-right-radius:4px; }
+  .status{ font-size:12px; opacity:.6; min-height:16px; margin:2px 0; text-align:center; flex-shrink:0; }
   .inputbar{
-    width:100%; display:flex; align-items:center; gap:10px;
-    background:rgba(255,255,255,.95); border-radius:999px; padding:8px 10px 8px 16px;
-    margin-top:auto; box-shadow:0 4px 16px rgba(0,0,0,.25);
+    width:100%; display:flex; align-items:center; gap:8px;
+    background:rgba(255,255,255,.95); border-radius:999px; padding:6px 8px 6px 14px;
+    margin-top:8px; box-shadow:0 4px 16px rgba(0,0,0,.25); flex-shrink:0;
   }
   .inputbar .icon-btn{
-    width:40px; height:40px; border-radius:50%; border:0; background:transparent;
-    font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    width:36px; height:36px; border-radius:50%; border:0; background:transparent;
+    font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center;
     flex-shrink:0; color:#555; padding:0;
   }
   .inputbar input{
-    flex:1; border:0; outline:0; background:transparent; font-size:18px; padding:8px 6px;
+    flex:1; border:0; outline:0; background:transparent; font-size:16px; padding:6px 4px;
     color:#333; min-width:0;
   }
   .inputbar input::placeholder{ color:#999; }
@@ -222,6 +218,8 @@ function playAnswer(ans){
 async function handleAsk(q){
   if(!q || !q.trim()) return;
   addMsg(q, 'user');
+  /* 用户手势里解锁音频 */
+  try{ const u=new Audio(); u.play(); u.pause(); }catch(e){}
   status.textContent = '月月想一下…';
   let ans;
   const useAI = apiKey || location.protocol.startsWith('http');
@@ -248,12 +246,12 @@ if(!SR){
   btnMic.onclick = ()=>{
     if(recognizing){ rec.stop(); return; }
     try{ rec.start(); }catch(e){}
-    recognizing=true; btnMic.textContent='🔴 正在听…'; status.textContent='请说…';
+    recognizing=true; btnMic.textContent='🔴'; status.textContent='请说…';
   };
-  rec.onresult = e=>{ const q=e.results[0][0].transcript; status.textContent='你说：'+q; handleAsk(q); };
-  rec.onend = ()=>{ recognizing=false; btnMic.textContent='🎤 和月月对话'; };
+  rec.onresult = e=>{ const q=e.results[0][0].transcript; handleAsk(q); };
+  rec.onend = ()=>{ recognizing=false; btnMic.textContent='🎤'; };
   rec.onerror = e=>{
-    recognizing=false; btnMic.textContent='🎤 和月月对话';
+    recognizing=false; btnMic.textContent='🎤';
     if(isFile || e.error==='not-allowed' || e.error==='service-not-allowed'){
       status.textContent='语音识别需 http://localhost 或 https 环境：请用下方输入框打字，或用 server.py 启动';
     } else {
