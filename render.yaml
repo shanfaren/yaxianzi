@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: yueyue-tooth-fairy
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: ARK_KEY
+        sync: false
+      - key: TTS_KEY
+        sync: false
