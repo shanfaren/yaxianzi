@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-牙仙子月月 - 云端后端（Render/Railway 免费托管）
+牙仙子月月 - 云端后端（Render 免费托管）
 环境变量：
   ARK_KEY   豆包大模型 Key（ark-开头）
   TTS_KEY   豆包语音 Key
 """
-import os, json, base64, urllib.request
+import os, json, base64, urllib.request, re
 from flask import Flask, request, jsonify, send_from_directory, Response
 
 app = Flask(__name__, static_folder=".", static_url_path="")
@@ -33,6 +33,66 @@ SYSTEM = """你是"牙仙子月月"，一个温柔可爱的Q版牙仙子，用�
 4. 问到牙齿以外的事，轻轻引导回来："这个月月不懂哦，我们聊聊小牙齿好不好？"
 5. 不诊断、不开药、不评价小朋友牙齿好不好看"""
 
+# ============ 常见问题缓存（15个） ============
+# (关键词列表, 回复文本)
+FAQ = [
+    (["你好", "嗨", "哈喽", "在吗", "hi", "hello"],
+     "你好呀小朋友！我是牙仙子月月，今天我们一起保护小牙齿吧！"),
+    (["你是谁", "叫什么", "名字", "谁是你"],
+     "我是牙仙子月月呀！专门陪小朋友保护小牙齿，牙齿亮晶晶的小仙子就是我！"),
+    (["怎么刷牙", "如何刷牙", "刷牙方法", "怎么刷"],
+     "每天早晚刷两次牙哦！外面画圈圈，里面竖起来刷，咬合面来回刷，每次刷够2分钟！"),
+    (["刷多久", "刷多长时间", "刷几分钟"],
+     "每次要刷够2分钟哦！可以一边刷牙一边唱一首歌，唱完就刷好啦！"),
+    (["牙膏", "挤多少", "多少牙膏"],
+     "小朋友用豌豆那么大一点牙膏就够啦，挤太多泡泡会跑到肚子里哦！"),
+    (["可乐", "汽水", "饮料", "奶茶", "果汁"],
+     "甜饮料里有好多糖和酸，会伤到小牙齿哦！口渴最好喝白开水，对牙齿最好啦！"),
+    (["吃糖", "糖", "零食", "巧克力"],
+     "偶尔吃一颗没关系，但吃完一定要漱口刷牙，小细菌最爱糖啦！"),
+    (["掉牙", "换牙", "牙松了", "牙齿掉了", "牙齿松"],
+     "别害怕！这是乳牙要换掉啦，新的恒牙会长出来陪你一辈子，别用手去晃它哦！"),
+    (["牙疼", "牙痛", "牙洞", "蛀牙", "疼"],
+     "牙疼要赶紧告诉爸爸妈妈，让牙医叔叔检查一下，他会轻轻帮你治好的！"),
+    (["出血", "牙龈", "流血"],
+     "刷牙要轻轻画圈，别太用力哦！如果每次刷牙都出血，一定要告诉爸爸妈妈让牙医看看。"),
+    (["牙医", "看牙", "怕看牙", "害怕医生"],
+     "半年去检查一次就好啦，牙医叔叔不可怕，他会帮你把小牙齿保护得白白亮亮！"),
+    (["六龄齿", "大牙"],
+     "六龄齿是6岁时长出来的大牙，它要陪你一辈子，一定要好好刷它哦！"),
+    (["口臭", "有味道", "口气"],
+     "认真刷到后牙和小舌头，多喝水！一直有味道就请牙医看看吧。"),
+    (["牙线", "牙缝", "塞牙"],
+     "牙线能清掉牙刷刷不到的牙缝小细菌哦！让爸爸妈妈教你怎么用吧。"),
+    (["黄牙", "牙齿黄", "发黄"],
+     "可能是喝了带颜色的饮料，认真刷内侧会改善；一直很黄就让牙医看看哦。"),
+]
+
+# 预生成的音频缓存：text -> mp3 bytes
+TTS_CACHE = {}
+
+def build_cache():
+    """启动时预生成常见问题的TTS音频"""
+    for keywords, text in FAQ:
+        try:
+            audio = tts_raw(text)
+            if audio:
+                TTS_CACHE[text] = audio
+                print(f"缓存音频: {text[:20]}...")
+        except Exception as e:
+            print(f"缓存失败 {text[:20]}: {e}")
+
+def match_faq(q):
+    """匹配常见问题，命中返回回复文本，否则返回None"""
+    q = q.lower().strip()
+    if len(q) < 1:
+        return None
+    for keywords, text in FAQ:
+        for kw in keywords:
+            if kw in q:
+                return text
+    return None
+
 def tts_raw(text):
     """返回mp3字节，失败返回None"""
     key = os.environ.get("TTS_KEY", "")
@@ -48,7 +108,7 @@ def tts_raw(text):
                  "X-Api-Resource-Id": "seed-tts-2.0"})
     chunks = []
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with urllib.request.urlopen(req, timeout=15) as r:
             for line in r:
                 line = line.strip()
                 if not line: continue
@@ -67,13 +127,19 @@ def index():
 
 @app.route("/api/chat", methods=["POST"])
 def chat():
-    key = os.environ.get("ARK_KEY", "")
-    if not key:
-        return jsonify({"error": "未配置 ARK_KEY"}), 500
     body = request.get_json() or {}
     q = body.get("message", "")
     history = body.get("history", [])
-    # 组装 messages：system + 最近10轮历史 + 当前问题
+
+    # 先查常见问题缓存
+    cached = match_faq(q)
+    if cached:
+        return jsonify({"reply": cached, "cached": True})
+
+    # 没命中缓存，调AI
+    key = os.environ.get("ARK_KEY", "")
+    if not key:
+        return jsonify({"error": "未配置 ARK_KEY"}), 500
     msgs = [{"role": "system", "content": SYSTEM}]
     for h in history[-20:]:
         role = h.get("role", "user")
@@ -98,7 +164,6 @@ def chat():
 
 @app.route("/api/photo", methods=["POST"])
 def photo():
-    """分析上传的牙齿照片"""
     key = os.environ.get("ARK_KEY", "")
     if not key:
         return jsonify({"error": "未配置 ARK_KEY"}), 500
@@ -106,12 +171,10 @@ def photo():
     img_b64 = data.get("image", "")
     if not img_b64:
         return jsonify({"error": "无图片"}), 400
-
     prompt = """你是牙仙子月月。请判断这张照片拍的是不是人的牙齿/口腔。
 如果是牙齿：用温柔的语气说1-2句简单的观察（比如牙齿颜色、有没有明显黑斑/蛀牙迹象、牙龈是否红肿），最后一定要说"不过这只是月月远远看的，一定要告诉爸爸妈妈，让牙医认真检查才准确哦"。
-如果不是牙齿（是别的东西）：温柔地说"月月只能帮小朋友看牙齿健康哦，你拍的不是牙齿，拍张开的小嘴巴给月月看看好不好？"
-要求：短句、温柔、像跟小朋友说话，不超过80字，不要用医学术语。"""
-
+如果不是牙齿：温柔地说"月月只能帮小朋友看牙齿健康哦，你拍的不是牙齿，拍张开的小嘴巴给月月看看好不好？"
+要求：短句、温柔、不超过80字。"""
     payload = json.dumps({
         "model": ARK_MODEL,
         "messages": [{"role": "user", "content": [
@@ -123,7 +186,7 @@ def photo():
     req = urllib.request.Request(ARK_URL, data=payload, method="POST",
         headers={"Content-Type": "application/json", "Authorization": "Bearer " + key})
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with urllib.request.urlopen(req, timeout=20) as r:
             resp = json.loads(r.read().decode())
             ans = resp["choices"][0]["message"]["content"].strip()
         return jsonify({"reply": ans})
@@ -134,6 +197,10 @@ def photo():
 def tts_api():
     text = request.args.get("text", "")
     if not text: return ("", 400)
+    # 先查缓存音频
+    if text in TTS_CACHE:
+        return Response(TTS_CACHE[text], mimetype="audio/mpeg",
+                        headers={"Cache-Control": "public, max-age=86400"})
     audio = tts_raw(text)
     if not audio: return ("", 500)
     return Response(audio, mimetype="audio/mpeg",
@@ -142,6 +209,11 @@ def tts_api():
 @app.route("/greeting.mp3")
 def greeting():
     return send_from_directory(".", "greeting.mp3")
+
+# 启动时预生成常见问题音频
+print("正在预生成常见问题音频...")
+build_cache()
+print(f"音频缓存完成，共 {len(TTS_CACHE)} 条")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
