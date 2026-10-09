@@ -153,6 +153,7 @@ const SYSTEM = `你是面向12岁以下儿童的护牙虚拟学伴"牙仙子月�
 /* ---------- 语音：优先甜美女声 ---------- */
 let zhVoice = null;
 function pickVoice(){
+  if(!('speechSynthesis' in window)) return;
   const vs = speechSynthesis.getVoices();
   // 优先 Windows 在线自然女声 / 经典女声
   const prefs = ['Xiaoxiao','Xiaoyi','Xiaomo','Xiaohan','Xiaoxuan','Xiaorui','Huihui','Yaoyao','Tingting'];
